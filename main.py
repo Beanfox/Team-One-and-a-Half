@@ -86,7 +86,8 @@ def write_telemetry_csv(csv_path: Path, timestamp: int, system_type: str, ui_dat
 
 def main():
     # 3. Initialize the GridEnv with 4 intersections.
-    env = GridEnv(num_intersections=4)
+    num_nodes = 36
+    env = GridEnv(num_intersections=num_nodes)
     csv_path = Path("traffic_metrics.csv")
     bridge_path = Path("data_bridge.json")
     public_bridge_path = Path("frontend/public/data_bridge.json")
@@ -109,23 +110,23 @@ def main():
         # 5. The Main Loop:
         while True:
             # 6. Error Handling: If the model file doesn't exist yet, use random actions so the loop doesn't crash.
-            actions = [random.randint(0, 1) for _ in range(4)]
+            actions = [random.randint(0, 1) for _ in range(num_nodes)]
             
             if HAS_MODEL and agent is not None and HAS_TORCH:
                 if len(state_buffer) > 0:
                     try:
-                        # Convert the current 4 intersection states into a torch tensor.
-                        # state_buffer is a list of shape (seq_len, 4, state_dim)
+                        # Convert the current 36 intersection states into a torch tensor.
+                        # state_buffer is a list of shape (seq_len, 36, state_dim)
                         state_tensor = torch.tensor(state_buffer, dtype=torch.float32)
                         
-                        # Pass the sequence of states to the Agent to get 4 actions (one for each node).
+                        # Pass the sequence of states to the Agent to get 36 actions (one for each node).
                         # We assume the agent has a get_actions or forward method that can handle the tensor.
                         if hasattr(agent, 'get_actions'):
                             model_actions = agent.get_actions(state_tensor)
                         else:
                             model_actions = agent(state_tensor)
                             
-                        if model_actions is not None and len(model_actions) == 4:
+                        if model_actions is not None and len(model_actions) == num_nodes:
                             actions = model_actions
                     except Exception as e:
                         # Fallback to random if model fails (e.g., mismatch in dimensions)
