@@ -19,7 +19,8 @@ except ImportError:
 
 def main():
     # 3. Initialize the GridEnv with 4 intersections.
-    env = GridEnv(num_intersections=4)
+    num_nodes = 36
+    env = GridEnv(num_intersections=num_nodes)
     
     agent = None
     if HAS_MODEL:
@@ -38,7 +39,7 @@ def main():
         # 5. The Main Loop:
         while True:
             # 6. Error Handling: If the model file doesn't exist yet, use random actions so the loop doesn't crash.
-            actions = [random.randint(0, 1) for _ in range(4)]
+            actions = [random.randint(0, 1) for _ in range(num_nodes)]
             
             if HAS_MODEL and agent is not None and HAS_TORCH:
                 if len(state_buffer) > 0:
@@ -54,7 +55,7 @@ def main():
                         else:
                             model_actions = agent(state_tensor)
                             
-                        if model_actions is not None and len(model_actions) == 4:
+                        if model_actions is not None and len(model_actions) == num_nodes:
                             actions = model_actions
                     except Exception as e:
                         # Fallback to random if model fails (e.g., mismatch in dimensions)
