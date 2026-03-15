@@ -126,11 +126,12 @@ class SimplifiedIntersection:
         rush = 1.3 if (self.global_step % 100) < 50 else 0.7
 
         if is_edge:
-            ns_rate = 0.55 * rush   # Heavy N/S
-            ew_rate = 0.12 * rush   # Light E/W
+            ns_rate = 0.56 * rush   # Heavy N/S
         else:
-            ns_rate = 0.10 * rush
-            ew_rate = 0.03 * rush
+            ns_rate = 0.12 * rush
+
+        # Enforce directional asymmetry (N/S receives ~4x E/W demand)
+        ew_rate = ns_rate / 4.0
 
         arrivals = np.array([
             np.random.poisson(ns_rate * 3),
@@ -265,26 +266,27 @@ class GridEnv:
         for i, inter in enumerate(self.intersections):
             nb = self._neighbors[i]
 
-            # Cars discharged along N/S direction (index 0) -> route to north & south
+            # Cars discharged along N/S direction (index 0) -> split to north & south.
+            # If one side is missing (edge), that portion leaves the grid.
             ns_discharged = inter.discharged_this_tick[0]
             if ns_discharged > 0:
-                ns_neighbors = [nb["north"], nb["south"]]
-                valid = [n for n in ns_neighbors if n is not None]
-                if valid:
-                    per_neighbor = ns_discharged / len(valid)
-                    for nid in valid:
-                        self.intersections[nid].add_routed_arrivals(0, per_neighbor)
-                # else: edge node, cars leave the grid
+                per_direction = ns_discharged / 2.0
+                for dir_key in ["north", "south"]:
+                    nid = nb[dir_key]
+                    if nid is not None:
+                        self.intersections[nid].add_routed_arrivals(0, per_direction)
+                    # else: cars leave the grid on this edge
 
-            # Cars discharged along E/W direction (index 1) -> route to east & west
+            # Cars discharged along E/W direction (index 1) -> split to east & west.
+            # If one side is missing (edge), that portion leaves the grid.
             ew_discharged = inter.discharged_this_tick[1]
             if ew_discharged > 0:
-                ew_neighbors = [nb["east"], nb["west"]]
-                valid = [n for n in ew_neighbors if n is not None]
-                if valid:
-                    per_neighbor = ew_discharged / len(valid)
-                    for nid in valid:
-                        self.intersections[nid].add_routed_arrivals(1, per_neighbor)
+                per_direction = ew_discharged / 2.0
+                for dir_key in ["east", "west"]:
+                    nid = nb[dir_key]
+                    if nid is not None:
+                        self.intersections[nid].add_routed_arrivals(1, per_direction)
+                    # else: cars leave the grid on this edge
 
         self.global_time += 1
         return states, rewards

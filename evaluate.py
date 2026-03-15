@@ -1,12 +1,40 @@
+import argparse
+import json
+import time
+from pathlib import Path
+
 import numpy as np
-import torch
-import matplotlib.pyplot as plt
 from env.traffic_env import GridEnv
-from agent import TrafficDecisionTransformer
+
+try:
+    import matplotlib.pyplot as plt
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 
 CONTEXT_LEN = 20
 NUM_NODES   = 36
 EVAL_STEPS  = 200
+LIVE_UI_SLEEP_SECONDS = 0.5
+
+BRIDGE_PATH = Path('evaluate_bridge.json')
+PUBLIC_BRIDGE_PATH = Path('frontend/public/evaluate_bridge.json')
+
+
+def write_ui_bridge(ui_data: dict):
+    PUBLIC_BRIDGE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    with BRIDGE_PATH.open('w', encoding='utf-8') as bridge_file:
+        json.dump(ui_data, bridge_file, indent=2)
+
+    with PUBLIC_BRIDGE_PATH.open('w', encoding='utf-8') as public_bridge_file:
+        json.dump(ui_data, public_bridge_file, indent=2)
 
 
 # ===================================================================
@@ -33,6 +61,11 @@ def run_baseline_episode(steps=EVAL_STEPS):
 #  AI POLICY — Decision Transformer on all 36 nodes
 # ===================================================================
 def run_ai_episode(model_path, steps=EVAL_STEPS):
+    if not HAS_TORCH:
+        raise RuntimeError("PyTorch is required for AI evaluation. Install torch before running evaluate.py.")
+
+    from agent import TrafficDecisionTransformer
+
     env = GridEnv(num_intersections=NUM_NODES, grid_cols=6)
     waits = []
 
@@ -116,10 +149,113 @@ def run_ai_episode(model_path, steps=EVAL_STEPS):
     return waits
 
 
+def run_ai_live_stream(model_path='dt_traffic_model.pth', sleep_seconds=LIVE_UI_SLEEP_SECONDS):
+    if not HAS_TORCH:
+        raise RuntimeError("PyTorch is required for live AI UI streaming. Install torch before running evaluate.py --live-ui.")
+
+    from agent import TrafficDecisionTransformer
+
+    env = GridEnv(num_intersections=NUM_NODES, grid_cols=6)
+
+    norm       = np.load('norm_stats.npz', allow_pickle=True)
+    state_mean = norm['state_mean']
+    state_std  = norm['state_std']
+    rtg_scale  = float(norm['rtg_scale'])
+    target_rtg = float(norm['target_rtg'])
+    norm_tid   = str(norm['training_id']) if 'training_id' in norm else None
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model  = TrafficDecisionTransformer(
+        state_dim=10, act_dim=2,
+        hidden_size=128, max_length=CONTEXT_LEN,
+        num_layers=3, num_heads=4,
+    ).to(device)
+
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model_tid = checkpoint.get('training_id', None)
+        model_epoch = checkpoint.get('epoch', '?')
+        if norm_tid and model_tid and norm_tid != model_tid:
+            print('    ⚠ WARNING: model and norm_stats are from DIFFERENT training runs!')
+            print(f'      norm_stats training_id = {norm_tid}')
+            print(f'      model training_id      = {model_tid}')
+            print('      → You MUST re-run train.py to completion before evaluating.')
+        print(f'    Model epoch: {model_epoch}')
+    else:
+        model.load_state_dict(checkpoint)
+        print('    ⚠ Legacy model format — no mismatch detection available')
+
+    model.eval()
+    print(f'    target_rtg = {target_rtg:.3f}  rtg_scale = {rtg_scale:.1f}')
+
+    init = [i.get_state_vector() for i in env.intersections]
+    buf_s, buf_a, buf_r, buf_t = [], [], [], []
+    for n in range(NUM_NODES):
+        ns = ((init[n] - state_mean) / state_std).astype(np.float32)
+        buf_s.append(torch.tensor(ns, dtype=torch.float32).reshape(1, 1, -1).to(device))
+        buf_a.append(torch.zeros(1, 1, dtype=torch.long, device=device))
+        buf_r.append(torch.tensor([[[target_rtg]]], dtype=torch.float32, device=device))
+        buf_t.append(torch.zeros(1, 1, dtype=torch.long, device=device))
+
+    print('Streaming live AI evaluation data for UI... Press Ctrl+C to stop.')
+
+    step = 0
+    try:
+        while True:
+            actions = []
+            for n in range(NUM_NODES):
+                a = model.get_action(buf_s[n], buf_a[n], buf_r[n], buf_t[n])
+                actions.append(a)
+
+            new_states, rewards = env.step(actions)
+            ui_data = env.get_ui_data()
+            write_ui_bridge(ui_data)
+
+            for n in range(NUM_NODES):
+                buf_a[n][0, -1] = actions[n]
+                cur_rtg = buf_r[n][0, -1, 0].item()
+                next_rtg = cur_rtg - rewards[n] / rtg_scale
+
+                ns = ((new_states[n] - state_mean) / state_std).astype(np.float32)
+                buf_s[n] = torch.cat([
+                    buf_s[n],
+                    torch.tensor(ns, dtype=torch.float32).reshape(1, 1, -1).to(device),
+                ], dim=1)
+                buf_a[n] = torch.cat([
+                    buf_a[n],
+                    torch.zeros(1, 1, dtype=torch.long, device=device),
+                ], dim=1)
+                buf_r[n] = torch.cat([
+                    buf_r[n],
+                    torch.tensor([[[next_rtg]]], dtype=torch.float32, device=device),
+                ], dim=1)
+                buf_t[n] = torch.cat([
+                    buf_t[n],
+                    torch.tensor([[min(step + 1, CONTEXT_LEN - 1)]], dtype=torch.long, device=device),
+                ], dim=1)
+
+                buf_s[n] = buf_s[n][:, -CONTEXT_LEN:]
+                buf_a[n] = buf_a[n][:, -CONTEXT_LEN:]
+                buf_r[n] = buf_r[n][:, -CONTEXT_LEN:]
+                buf_t[n] = buf_t[n][:, -CONTEXT_LEN:]
+
+            step += 1
+            if step % 5 == 0:
+                print(f'Completed {step} live evaluation steps. Latest UI time: {ui_data.get("time")}')
+
+            time.sleep(sleep_seconds)
+    except KeyboardInterrupt:
+        print('\nLive evaluation stream stopped by user.')
+
+
 # ===================================================================
 #  EVALUATE
 # ===================================================================
 def evaluate():
+    if not HAS_MATPLOTLIB:
+        raise RuntimeError("matplotlib is required for evaluate() plotting. Install matplotlib before running offline evaluation.")
+
     num_runs = 3
     print(f"Evaluating: {num_runs} runs × {EVAL_STEPS} steps × {NUM_NODES} nodes\n")
 
@@ -157,4 +293,13 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    evaluate()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--live-ui', action='store_true', help='Stream AI evaluation output for frontend UI polling')
+    parser.add_argument('--model-path', default='dt_traffic_model.pth', help='Path to trained model checkpoint')
+    parser.add_argument('--sleep', type=float, default=LIVE_UI_SLEEP_SECONDS, help='Seconds between live evaluation steps')
+    args = parser.parse_args()
+
+    if args.live_ui:
+        run_ai_live_stream(model_path=args.model_path, sleep_seconds=args.sleep)
+    else:
+        evaluate()

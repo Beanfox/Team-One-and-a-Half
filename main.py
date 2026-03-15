@@ -95,7 +95,10 @@ def main():
     csv_path = Path("traffic_metrics.csv")
     bridge_path = Path("data_bridge.json")
     public_bridge_path = Path("frontend/public/data_bridge.json")
+    evaluate_bridge_path = Path("evaluate_bridge.json")
+    public_evaluate_bridge_path = Path("frontend/public/evaluate_bridge.json")
     public_bridge_path.parent.mkdir(parents=True, exist_ok=True)
+    public_evaluate_bridge_path.parent.mkdir(parents=True, exist_ok=True)
     
     agent = None
     if HAS_MODEL:
@@ -162,6 +165,13 @@ def main():
 
             with public_bridge_path.open("w", encoding="utf-8") as public_bridge_file:
                 json.dump(ui_data, public_bridge_file, indent=2)
+
+            # Compatibility output for frontend polling from evaluate_bridge.json
+            with evaluate_bridge_path.open("w", encoding="utf-8") as evaluate_bridge_file:
+                json.dump(ui_data, evaluate_bridge_file, indent=2)
+
+            with public_evaluate_bridge_path.open("w", encoding="utf-8") as public_evaluate_bridge_file:
+                json.dump(ui_data, public_evaluate_bridge_file, indent=2)
                 
             step_count += 1
             if step_count % 5 == 0:

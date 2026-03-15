@@ -208,7 +208,7 @@ function App() {
 
     const pollBridge = async () => {
       try {
-        const response = await fetch('/data_bridge.json', { cache: 'no-store' })
+        const response = await fetch('/evaluate_bridge.json', { cache: 'no-store' })
         if (!response.ok) {
           return
         }
@@ -222,6 +222,14 @@ function App() {
 
         setEnvironmentHistory((previousHistory) => {
           const latest = previousHistory[previousHistory.length - 1]
+
+          if (latest && normalizedPayload.time < latest.time) {
+            const hasRestarted = latest.time - normalizedPayload.time > 5
+            if (hasRestarted) {
+              return [normalizedPayload]
+            }
+          }
+
           if (!latest || normalizedPayload.time > latest.time) {
             const withoutFallback =
               previousHistory.length === 1 && previousHistory[0].time === 0
