@@ -165,26 +165,36 @@ def generate_network_trajectories(num_episodes=200, max_steps=MAX_STEPS):
 # ---------------------------------------------------------------------------
 # 2.  NORMALIZATION
 # ---------------------------------------------------------------------------
-def normalize_data(trajectories):
+def normalize_data(all_trajectories, diverse_trajectories):
     """
-    States  → z-score  (subtract mean, divide by std)
+    States  → z-score  (subtract mean, divide by std)  — computed from ALL data
     RTG     → scale-only  (divide by scale, NO mean subtraction)
+
+    CRITICAL: rtg_scale and target_rtg are computed from DIVERSE data only.
+    The expert data comes from a 10,000-step continuous simulation where
+    congestion snowballs over time (rewards reach -8500 by step 8000).
+    Late chunks have returns ~-800K, which would inflate rtg_scale to ~450K
+    and compress all scaled returns to near zero, breaking conditioning.
     """
-    all_states = np.concatenate([t['states'] for t in trajectories], axis=0)
+    # --- States: z-score from ALL data ---
+    all_states = np.concatenate([t['states'] for t in all_trajectories], axis=0)
     state_mean = all_states.mean(axis=0)
     state_std  = all_states.std(axis=0) + 1e-6
 
-    episode_returns = np.array([t['returns_to_go'][0, 0] for t in trajectories])
-    rtg_scale = np.std(episode_returns) + 1e-6
+    # --- RTG scale: from DIVERSE data only (fresh-reset episodes) ---
+    diverse_returns = np.array([t['returns_to_go'][0, 0] for t in diverse_trajectories])
+    rtg_scale = np.std(diverse_returns) + 1e-6
 
-    for t in trajectories:
+    # Apply normalization to ALL trajectories
+    for t in all_trajectories:
         t['states']       = ((t['states'] - state_mean) / state_std).astype(np.float32)
         t['returns_to_go'] = (t['returns_to_go'] / rtg_scale).astype(np.float32)
 
-    top_return_raw = float(np.percentile(episode_returns, 90))
+    # Target: top 10% of DIVERSE episode returns (in scaled space)
+    top_return_raw = float(np.percentile(diverse_returns, 90))
     target_rtg     = top_return_raw / rtg_scale
 
-    return trajectories, state_mean, state_std, rtg_scale, target_rtg
+    return all_trajectories, state_mean, state_std, rtg_scale, target_rtg
 
 
 # ---------------------------------------------------------------------------
@@ -253,8 +263,8 @@ def train():
         print(f"  Expert returns:  mean={np.mean(expert_rets):.0f}  best={np.max(expert_rets):.0f}")
         print(f"  Diverse returns: mean={np.mean(diverse_rets):.0f}  best={np.max(diverse_rets):.0f}")
 
-    # --- Normalize ---
-    all_trajs, s_mean, s_std, rtg_scale, target_rtg = normalize_data(all_trajs)
+    # --- Normalize (scale from diverse data only) ---
+    all_trajs, s_mean, s_std, rtg_scale, target_rtg = normalize_data(all_trajs, diverse_trajs)
     print(f"\n  rtg_scale = {rtg_scale:.1f}")
     print(f"  Target RTG (scaled, top-10%) = {target_rtg:.3f}")
 
