@@ -20,3 +20,84 @@ html,
 body {
 	overscroll-behavior-y: none;
 }
+
+html,
+body {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(148, 163, 184, 0.35) rgba(15, 23, 42, 0.45);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+	background: rgba(15, 23, 42, 0.45);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+	background: linear-gradient(
+		180deg,
+		rgba(148, 163, 184, 0.32),
+		rgba(148, 163, 184, 0.22)
+	);
+	border-radius: 9999px;
+	border: 2px solid rgba(2, 6, 23, 0.7);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+	background: linear-gradient(
+		180deg,
+		rgba(186, 230, 253, 0.38),
+		rgba(148, 163, 184, 0.3)
+	);
+}
+
+.subtle-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(148, 163, 184, 0.35) rgba(15, 23, 42, 0.45);
+}
+
+.subtle-scrollbar::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-track {
+	background: rgba(15, 23, 42, 0.35);
+	border-radius: 9999px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb {
+	background: linear-gradient(
+		90deg,
+		rgba(148, 163, 184, 0.3),
+		rgba(148, 163, 184, 0.2)
+	);
+	border-radius: 9999px;
+	border: 1px solid rgba(15, 23, 42, 0.5);
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb:hover {
+	background: linear-gradient(
+		90deg,
+		rgba(186, 230, 253, 0.34),
+		rgba(148, 163, 184, 0.26)
+	);
+}
+
+.no-number-spinner::-webkit-outer-spin-button,
+.no-number-spinner::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.no-number-spinner[type='number'] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}

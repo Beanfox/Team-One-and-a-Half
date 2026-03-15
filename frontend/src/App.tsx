@@ -332,11 +332,12 @@ type DashboardPageProps = {
 function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPageProps) {
   const latest = environmentHistory[environmentHistory.length - 1]
   const [cityFrameIndex, setCityFrameIndex] = useState(0)
+  const [isCityAutoFollow, setIsCityAutoFollow] = useState(true)
   const [cityZoom, setCityZoom] = useState(0.5)
+  const [cityZoomInput, setCityZoomInput] = useState('50')
   const [cityPan, setCityPan] = useState({ x: 0, y: 0 })
   const [isCityDragging, setIsCityDragging] = useState(false)
   const [isCityFullscreen, setIsCityFullscreen] = useState(false)
-  const previousCityFrameMaxRef = useRef(0)
   const cityPanelRef = useRef<HTMLDivElement | null>(null)
   const cityPanStartRef = useRef<{
     pointerX: number
@@ -362,19 +363,15 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
   useEffect(() => {
     const nextMax = Math.max(environmentHistory.length - 1, 0)
 
-    setCityFrameIndex((currentIndex) => {
-      const previousMax = previousCityFrameMaxRef.current
-      const wasAtLatestFrame = currentIndex >= previousMax
+    if (isCityAutoFollow) {
+      setCityFrameIndex((currentIndex) =>
+        currentIndex === nextMax ? currentIndex : nextMax,
+      )
+      return
+    }
 
-      if (wasAtLatestFrame) {
-        return nextMax
-      }
-
-      return Math.min(currentIndex, nextMax)
-    })
-
-    previousCityFrameMaxRef.current = nextMax
-  }, [environmentHistory])
+    setCityFrameIndex((currentIndex) => Math.min(currentIndex, nextMax))
+  }, [environmentHistory, isCityAutoFollow])
 
   const nodes = useMemo(() => toDerivedNodes(latest), [latest])
   const tickLabels = environmentHistory.map((tick) => `T${tick.time}`)
@@ -409,6 +406,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
   const [insightSelection, setInsightSelection] = useState<InsightSelection>({
     kind: 'totalQueue',
   })
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
 
   const selectedInsight = useMemo<InsightData>(() => {
     if (insightSelection.kind === 'totalQueue') {
@@ -477,9 +475,39 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     environmentHistory,
   ])
 
-  const cityFrame = environmentHistory[cityFrameIndex] ?? latest
-  const cityLayout = useMemo(() => buildCityLayout(cityFrame), [cityFrame])
   const cityFrameMax = Math.max(environmentHistory.length - 1, 0)
+  const activeCityFrameIndex = isCityAutoFollow
+    ? cityFrameMax
+    : Math.min(cityFrameIndex, cityFrameMax)
+  const cityFrame = environmentHistory[activeCityFrameIndex] ?? latest
+  const cityLayout = useMemo(() => buildCityLayout(cityFrame), [cityFrame])
+
+  const clampCityZoomPercent = (nextPercent: number) => Math.min(260, Math.max(50, nextPercent))
+
+  useEffect(() => {
+    setCityZoomInput(String(Math.round(cityZoom * 100)))
+  }, [cityZoom])
+
+  const setCityZoomFromPercent = (nextPercent: number) => {
+    if (!Number.isFinite(nextPercent)) {
+      return
+    }
+
+    const clampedPercent = clampCityZoomPercent(nextPercent)
+    setCityZoom(Number((clampedPercent / 100).toFixed(2)))
+  }
+
+  const commitCityZoomInput = () => {
+    const parsed = Number(cityZoomInput)
+    if (Number.isNaN(parsed)) {
+      setCityZoomInput(String(Math.round(cityZoom * 100)))
+      return
+    }
+
+    const clampedPercent = clampCityZoomPercent(parsed)
+    setCityZoomFromPercent(clampedPercent)
+    setCityZoomInput(String(Math.round(clampedPercent)))
+  }
 
   const toggleCityFullscreen = async () => {
     try {
@@ -580,149 +608,197 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(56,189,248,0.14),transparent_36%),radial-gradient(circle_at_80%_0%,rgba(129,140,248,0.12),transparent_35%),radial-gradient(circle_at_50%_100%,rgba(96,165,250,0.08),transparent_45%)]" />
 
       <div className="mx-auto w-full max-w-[1450px] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-        <header className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-200/90">
-                6ix Streets • Live Operations
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
-                City Traffic Overview
-              </h2>
-              <p className="mt-2 text-sm text-slate-300 sm:text-base">
-                A simplified view of congestion, wait times, and signal status
-                across the network.
-              </p>
+        <div className="space-y-4">
+          <header className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-200/90">
+                  6ix Streets • Live Operations
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
+                  City Traffic Overview
+                </h2>
+                <p className="mt-2 text-sm text-slate-300 sm:text-base">
+                  A simplified view of congestion, wait times, and signal status
+                  across the network.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onBackToLanding}
+                className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-200/40 hover:bg-white/10"
+              >
+                Back to Landing
+              </button>
             </div>
+          </header>
 
-            <button
-              type="button"
-              onClick={onBackToLanding}
-              className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-200/40 hover:bg-white/10"
-            >
-              Back to Landing
-            </button>
-          </div>
-        </header>
+          <CollapsibleTabSection
+            title="Network Metrics + Insights and Alerts"
+            description="Open or close KPI tiles, trend charts, and live incident alerts."
+            defaultOpen={false}
+          >
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricTile
+                label="Cars Waiting"
+                value={String(totalQueue)}
+                detail="Vehicles currently queued"
+                gradient="from-indigo-300 to-violet-300"
+                onClick={() => setInsightSelection({ kind: 'totalQueue' })}
+              />
+              <MetricTile
+                label="Average Wait Time"
+                value={`${averageNodeWait}s`}
+                detail="Typical delay per intersection"
+                gradient="from-sky-300 to-cyan-300"
+                onClick={() => setInsightSelection({ kind: 'avgWait' })}
+              />
+              <MetricTile
+                label="Green Signals"
+                value={String(greenNodes)}
+                detail="Intersections with active green"
+                gradient="from-emerald-300 to-teal-300"
+                onClick={() => setInsightSelection({ kind: 'greenSignals' })}
+              />
+              <MetricTile
+                label="Peak Node Queue"
+                value={`${maxQueueNode.id.replace('node_', 'Node ')} (${maxQueueNode.totalQueue})`}
+                detail={`Largest queue right now • ${redNodes} red signals`}
+                gradient="from-rose-300 to-orange-300"
+                onClick={() => setInsightSelection({ kind: 'peakNode' })}
+              />
+            </section>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricTile
-            label="Cars Waiting"
-            value={String(totalQueue)}
-            detail="Vehicles currently queued"
-            gradient="from-indigo-300 to-violet-300"
-            onClick={() => setInsightSelection({ kind: 'totalQueue' })}
-          />
-          <MetricTile
-            label="Average Wait Time"
-            value={`${averageNodeWait}s`}
-            detail="Typical delay per intersection"
-            gradient="from-sky-300 to-cyan-300"
-            onClick={() => setInsightSelection({ kind: 'avgWait' })}
-          />
-          <MetricTile
-            label="Signals Open / Stopped"
-            value={`${greenNodes}/${redNodes}`}
-            detail="Current light status mix"
-            gradient="from-teal-300 to-emerald-300"
-            onClick={() => setInsightSelection({ kind: 'greenSignals' })}
-          />
-          <MetricTile
-            label="Most Congested Spot"
-            value={maxQueueNode.id.replace('node_', 'Node ')}
-            detail={`${maxQueueNode.totalQueue} cars waiting`}
-            gradient="from-amber-200 to-orange-300"
-            onClick={() => setInsightSelection({ kind: 'peakNode' })}
-          />
-        </section>
+            <section className="mt-6 grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+              <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
+                <h3 className="text-lg font-semibold text-white sm:text-xl">Selected Insight</h3>
+                <p className="text-sm text-slate-400">
+                  Pick any top metric tile or intersection card to update this chart.
+                </p>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-          <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
-            <h3 className="text-lg font-semibold text-white sm:text-xl">Selected Insight</h3>
-            <p className="text-sm text-slate-400">
-              Pick any top metric tile or intersection card to update this chart.
-            </p>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/55 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-slate-400">{selectedInsight.description}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Samples: {selectedInsight.values.length}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <InsightChart insight={selectedInsight} />
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => exportInsightToExcel(selectedInsight)}
-                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
-                >
-                  Export to Excel (.xlsx)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => exportInsightToPowerBI(selectedInsight)}
-                  className="rounded-xl border border-sky-300/40 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/20"
-                >
-                  Export for Power BI (.csv)
-                </button>
-              </div>
-            </div>
-          </article>
-
-          <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
-            <h3 className="text-lg font-semibold text-white sm:text-xl">Live Alerts</h3>
-            <p className="text-sm text-slate-400">
-              Important traffic updates generated from current conditions.
-            </p>
-            <ul className="mt-4 space-y-3">
-              {generatedEvents.map((event) => (
-                <li
-                  key={`${event.time}-${event.message}`}
-                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-400">Update {event.time}</span>
-                    <LevelPill level={event.level} />
+                <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/55 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-slate-400">{selectedInsight.description}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Samples: {selectedInsight.values.length}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-2 text-sm text-slate-200">{event.message}</p>
-                </li>
-              ))}
-            </ul>
-          </article>
-        </section>
 
-        <section className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
-          <h3 className="text-lg font-semibold text-white sm:text-xl">Intersection Snapshot</h3>
-          <p className="text-sm text-slate-400">
-            Simple per-location status for quick decisions.
-          </p>
-          <div className="mt-4 overflow-x-auto pb-2">
-            <div className="flex min-w-max gap-3 pr-2">
-              {nodes.map((node) => (
-                <div key={node.id} className="w-72 shrink-0">
+                  <div className="mt-4">
+                    <InsightChart insight={selectedInsight} />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <div
+                      className="relative"
+                      onMouseLeave={() => setIsExportMenuOpen(false)}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setIsExportMenuOpen((current) => !current)}
+                        className="rounded-md border border-white/20 bg-slate-900/75 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:bg-slate-800/85"
+                        aria-expanded={isExportMenuOpen}
+                        aria-haspopup="menu"
+                      >
+                        Export
+                      </button>
+
+                      {isExportMenuOpen ? (
+                        <div
+                          role="menu"
+                          className="absolute left-0 top-full z-20 min-w-[13rem] rounded-md border border-white/15 bg-slate-950/95 p-1.5 shadow-lg shadow-black/40 backdrop-blur-sm"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              exportInsightToExcel(selectedInsight)
+                              setIsExportMenuOpen(false)
+                            }}
+                            className="w-full rounded px-2.5 py-1.5 text-left text-xs text-slate-100 transition hover:bg-white/10"
+                          >
+                            Export to Excel (.xlsx)
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              exportInsightToPowerBI(selectedInsight)
+                              setIsExportMenuOpen(false)
+                            }}
+                            className="mt-1 w-full rounded px-2.5 py-1.5 text-left text-xs text-sky-100 transition hover:bg-sky-400/15"
+                          >
+                            Export for Power BI (.csv)
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
+                <h3 className="text-lg font-semibold text-white sm:text-xl">Live Alerts</h3>
+                <p className="text-sm text-slate-400">
+                  Important traffic updates generated from current conditions.
+                </p>
+                <div className="subtle-scrollbar mt-4 max-h-[28rem] overflow-y-auto pr-2">
+                  <div className="sticky top-1 z-10 mb-2 flex justify-end">
+                    <span className="rounded-full border border-white/15 bg-slate-950/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300 backdrop-blur-sm">
+                      Live Alerts · {generatedEvents.length}
+                    </span>
+                  </div>
+                  <ul className="space-y-3">
+                    {generatedEvents.map((event) => (
+                      <li
+                        key={`${event.time}-${event.message}`}
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-slate-400">Update {event.time}</span>
+                          <LevelPill level={event.level} />
+                        </div>
+                        <p className="mt-2 text-sm text-slate-200">{event.message}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            </section>
+          </CollapsibleTabSection>
+
+          <CollapsibleTabSection
+            title="Intersection Snapshot"
+            description="Simple per-location status for quick decisions."
+            defaultOpen={false}
+          >
+            <div className="subtle-scrollbar max-h-[42rem] overflow-y-auto pr-2">
+              <div className="grid grid-cols-4 gap-3">
+                {nodes.map((node) => (
                   <IntersectionCard
+                    key={node.id}
                     node={node}
                     onClick={() => setInsightSelection({ kind: 'nodeQueue', nodeId: node.id })}
                   />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </CollapsibleTabSection>
 
-        <section
-          ref={cityPanelRef}
-          className={`mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-3.5 shadow-lg shadow-black/20 sm:p-4 ${
-            isCityFullscreen ? 'h-full overflow-auto bg-slate-950' : ''
-          }`}
-        >
+          <CollapsibleTabSection
+            title="Top-Down City Simulation"
+            description="Open or close the full map, zoom, and timeline controls."
+            defaultOpen={false}
+          >
+            <section
+              ref={cityPanelRef}
+              className={`rounded-3xl border border-white/10 bg-white/[0.03] p-3.5 shadow-lg shadow-black/20 sm:p-4 ${
+                isCityFullscreen ? 'h-full overflow-auto bg-slate-950' : ''
+              }`}
+            >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-white sm:text-xl">
@@ -735,7 +811,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
 
             <div className="flex items-center gap-2">
               <span className="rounded-lg border border-slate-600/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">
-                Frame {cityFrameIndex + 1}/{cityFrameMax + 1} • t={cityFrame.time}
+                Frame {activeCityFrameIndex + 1}/{cityFrameMax + 1} • t={cityFrame.time}
               </span>
               <button
                 type="button"
@@ -776,7 +852,35 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                 +
               </button>
               <span className="rounded-md border border-slate-600/60 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">
-                {Math.round(cityZoom * 100)}%
+                <label className="inline-flex items-center gap-1">
+                  <span>Zoom</span>
+                  <input
+                    type="number"
+                    min={50}
+                    max={260}
+                    step={1}
+                    value={cityZoomInput}
+                    onChange={(event) => {
+                      setCityZoomInput(event.target.value)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        commitCityZoomInput()
+                        ;(event.currentTarget as HTMLInputElement).blur()
+                        return
+                      }
+
+                      if (event.key === 'Escape') {
+                        setCityZoomInput(String(Math.round(cityZoom * 100)))
+                        ;(event.currentTarget as HTMLInputElement).blur()
+                      }
+                    }}
+                    onBlur={commitCityZoomInput}
+                    className="no-number-spinner w-14 rounded border border-white/15 bg-slate-900/80 px-1.5 py-0.5 text-right text-[11px] text-slate-100 outline-none transition focus:border-sky-300/60"
+                    aria-label="Zoom percentage"
+                  />
+                  <span>%</span>
+                </label>
               </span>
               <button
                 type="button"
@@ -900,8 +1004,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
             <div className="sticky bottom-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/80 p-1.5 backdrop-blur-sm">
               <button
                 type="button"
-                onClick={() => setCityFrameIndex(0)}
-                disabled={cityFrameIndex <= 0}
+                onClick={() => {
+                  setIsCityAutoFollow(false)
+                  setCityFrameIndex(0)
+                }}
+                disabled={activeCityFrameIndex <= 0}
                 className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Jump to first frame"
               >
@@ -909,8 +1016,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               </button>
               <button
                 type="button"
-                onClick={() => setCityFrameIndex((index) => Math.max(0, index - 1))}
-                disabled={cityFrameIndex <= 0}
+                onClick={() => {
+                  setIsCityAutoFollow(false)
+                  setCityFrameIndex(Math.max(0, activeCityFrameIndex - 1))
+                }}
+                disabled={activeCityFrameIndex <= 0}
                 className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Previous frame"
               >
@@ -921,17 +1031,28 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                 type="range"
                 min={0}
                 max={cityFrameMax}
-                value={Math.min(cityFrameIndex, cityFrameMax)}
+                value={activeCityFrameIndex}
                 onChange={(event) => {
-                  setCityFrameIndex(Number(event.target.value))
+                  const nextIndex = Number(event.target.value)
+                  setCityFrameIndex(nextIndex)
+
+                  if (nextIndex >= cityFrameMax) {
+                    setIsCityAutoFollow(true)
+                  }
                 }}
                 className="min-w-[220px] flex-1 accent-sky-300"
               />
 
               <button
                 type="button"
-                onClick={() => setCityFrameIndex((index) => Math.min(cityFrameMax, index + 1))}
-                disabled={cityFrameIndex >= cityFrameMax}
+                onClick={() => {
+                  const nextIndex = Math.min(cityFrameMax, activeCityFrameIndex + 1)
+                  setCityFrameIndex(nextIndex)
+                  if (nextIndex >= cityFrameMax) {
+                    setIsCityAutoFollow(true)
+                  }
+                }}
+                disabled={activeCityFrameIndex >= cityFrameMax}
                 className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Next frame"
               >
@@ -939,8 +1060,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               </button>
               <button
                 type="button"
-                onClick={() => setCityFrameIndex(cityFrameMax)}
-                disabled={cityFrameIndex >= cityFrameMax}
+                onClick={() => {
+                  setCityFrameIndex(cityFrameMax)
+                  setIsCityAutoFollow(true)
+                }}
+                disabled={activeCityFrameIndex >= cityFrameMax}
                 className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Jump to last frame"
               >
@@ -948,7 +1072,9 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               </button>
             </div>
           </div>
-        </section>
+            </section>
+          </CollapsibleTabSection>
+        </div>
       </div>
     </main>
   )
@@ -1125,7 +1251,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
     })
   }
 
-  return events.slice(0, 5)
+  return events
 }
 
 type LandingStatProps = {
@@ -1316,6 +1442,47 @@ function NodeStat({ label, value }: NodeStatProps) {
       <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xs text-slate-100">{value}</p>
     </div>
+  )
+}
+
+type CollapsibleTabSectionProps = {
+  title: string
+  description?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}
+
+function CollapsibleTabSection({
+  title,
+  description,
+  defaultOpen = true,
+  children,
+}: CollapsibleTabSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-3 shadow-lg shadow-black/20 sm:px-5 sm:py-4">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/45 px-3 py-2 text-left transition hover:border-sky-200/30 hover:bg-slate-900/65"
+        aria-expanded={isOpen}
+      >
+        <div>
+          <p className="text-base font-semibold text-white sm:text-lg">{title}</p>
+          {description ? <p className="text-xs text-slate-400 sm:text-sm">{description}</p> : null}
+        </div>
+        <span className="text-xl leading-none text-slate-200">{isOpen ? '−' : '+'}</span>
+      </button>
+
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          isOpen ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className={isOpen ? 'overflow-visible' : 'overflow-hidden'}>{children}</div>
+      </div>
+    </section>
   )
 }
 
