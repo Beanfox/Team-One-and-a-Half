@@ -19,8 +19,12 @@ try:
     from model.agent import TrafficDecisionTransformer
     HAS_MODEL = True
 except ImportError:
-    HAS_MODEL = False
-    print("Warning: model.agent.TrafficDecisionTransformer not found. Using random actions.")
+    try:
+        from agent import TrafficDecisionTransformer
+        HAS_MODEL = True
+    except ImportError:
+        HAS_MODEL = False
+        print("Warning: TrafficDecisionTransformer not found. Using random actions.")
 
 
 def write_telemetry_csv(csv_path: Path, timestamp: int, system_type: str, ui_data: dict):
