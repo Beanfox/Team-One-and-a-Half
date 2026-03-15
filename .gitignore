@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Local virtual environment
+venv/
+
+# Runtime bridge/telemetry artifacts
+evaluate_bridge.json
+frontend/public/evaluate_bridge.json
+traffic_metrics.csv
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
