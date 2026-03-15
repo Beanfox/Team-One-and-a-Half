@@ -280,7 +280,7 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
 
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center px-6 py-10 text-center sm:px-8">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-sky-200/90">
-          City Wide Traffic Monitor
+          AI Traffic Wait-Time Reduction
         </p>
 
         <h1 className="mt-4 max-w-4xl text-5xl font-bold leading-tight text-white sm:text-6xl lg:text-7xl">
@@ -288,8 +288,8 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
         </h1>
 
         <p className="mt-4 max-w-3xl text-sm text-slate-300 sm:text-base">
-          Real-time traffic insights that help reduce congestion, shorten waits,
-          and keep city movement smooth.
+          AI-driven traffic signal control designed to reduce time spent waiting,
+          cut intersection congestion, and keep vehicles moving.
         </p>
 
         <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -298,15 +298,15 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
             onClick={onEnterDashboard}
             className="rounded-xl bg-sky-300 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-400/10 transition hover:bg-sky-200"
           >
-            View Live Dashboard
+            Open AI Control Dashboard
           </button>
         </div>
 
         <div className="mt-12 grid w-full max-w-5xl gap-4 md:grid-cols-3">
           <LandingStat
-            title="Current Update"
+            title="Model Update"
             value={`t=${latest.time}`}
-            detail="Latest system snapshot"
+            detail="Latest AI decision cycle"
           />
           <LandingStat
             title="Intersections Monitored"
@@ -314,9 +314,9 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
             detail="Live city network nodes"
           />
           <LandingStat
-            title="Traffic Visibility"
+            title="Wait-Time Focus"
             value="24/7"
-            detail="Clear, live congestion overview"
+            detail="Continuous optimization coverage"
           />
         </div>
       </section>
@@ -411,11 +411,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
   const selectedInsight = useMemo<InsightData>(() => {
     if (insightSelection.kind === 'totalQueue') {
       return {
-        title: 'Cars Waiting',
+        title: 'Total Queue Load',
         unit: 'cars',
         labels: tickLabels,
         values: totalQueueSeries,
-        description: 'Total queued vehicles across the network by environment tick.',
+        description: 'Total vehicles waiting across the network at each AI decision tick.',
       }
     }
 
@@ -425,27 +425,27 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
         unit: 'sec',
         labels: tickLabels,
         values: avgWaitSeries,
-        description: 'Average wait across all intersections by environment tick.',
+        description: 'Average seconds waited across all intersections per AI decision tick.',
       }
     }
 
     if (insightSelection.kind === 'greenSignals') {
       return {
-        title: 'Green Signals',
+        title: 'Green Release Count',
         unit: 'lights',
         labels: tickLabels,
         values: greenNodeSeries,
-        description: 'Count of intersections on green at each tick.',
+        description: 'Number of intersections currently releasing traffic at each tick.',
       }
     }
 
     if (insightSelection.kind === 'peakNode') {
       return {
-        title: 'Peak Node Queue',
+        title: 'Highest Queue by Node',
         unit: 'cars',
         labels: tickLabels,
         values: maxQueueSeries,
-        description: 'Highest single-node queue observed at each environment tick.',
+        description: 'Worst single-node waiting queue observed at each AI decision tick.',
       }
     }
 
@@ -459,11 +459,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     })
 
     return {
-      title: `${nodeId.replace('node_', 'Node ')} Queue`,
+      title: `${nodeId.replace('node_', 'Node ')} Wait Queue`,
       unit: 'cars',
       labels: tickLabels,
       values: queueSeries,
-      description: `Queue trend for ${nodeId.replace('node_', 'Node ')} across recorded ticks.`,
+      description: `Wait-queue trend for ${nodeId.replace('node_', 'Node ')} across AI decision ticks.`,
     }
   }, [
     insightSelection,
@@ -616,11 +616,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                   6ix Streets • Live Operations
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
-                  City Traffic Overview
+                  AI Wait-Time Reduction Control Center
                 </h2>
                 <p className="mt-2 text-sm text-slate-300 sm:text-base">
-                  A simplified view of congestion, wait times, and signal status
-                  across the network.
+                  Track how AI control decisions reduce queue buildup,
+                  lower average waits, and improve flow across the network.
                 </p>
               </div>
 
@@ -635,36 +635,36 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
           </header>
 
           <CollapsibleTabSection
-            title="Network Metrics + Insights and Alerts"
-            description="Open or close KPI tiles, trend charts, and live incident alerts."
+            title="AI Metrics + Performance Alerts"
+            description="Wait-time reduction KPIs, AI trend charts, and live traffic alerts."
             defaultOpen={false}
           >
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MetricTile
-                label="Cars Waiting"
+                label="Current Queue Load"
                 value={String(totalQueue)}
-                detail="Vehicles currently queued"
+                detail="Vehicles currently waiting"
                 gradient="from-indigo-300 to-violet-300"
                 onClick={() => setInsightSelection({ kind: 'totalQueue' })}
               />
               <MetricTile
-                label="Average Wait Time"
+                label="Average Wait"
                 value={`${averageNodeWait}s`}
-                detail="Typical delay per intersection"
+                detail="AI target: reduce this value"
                 gradient="from-sky-300 to-cyan-300"
                 onClick={() => setInsightSelection({ kind: 'avgWait' })}
               />
               <MetricTile
-                label="Green Signals"
+                label="Active Green Paths"
                 value={String(greenNodes)}
-                detail="Intersections with active green"
+                detail="Intersections currently releasing traffic"
                 gradient="from-emerald-300 to-teal-300"
                 onClick={() => setInsightSelection({ kind: 'greenSignals' })}
               />
               <MetricTile
-                label="Peak Node Queue"
+                label="Highest Queue Node"
                 value={`${maxQueueNode.id.replace('node_', 'Node ')} (${maxQueueNode.totalQueue})`}
-                detail={`Largest queue right now • ${redNodes} red signals`}
+                detail={`Main delay hotspot • ${redNodes} red signals`}
                 gradient="from-rose-300 to-orange-300"
                 onClick={() => setInsightSelection({ kind: 'peakNode' })}
               />
@@ -672,9 +672,9 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
 
             <section className="mt-6 grid gap-6 xl:grid-cols-[1.6fr_1fr]">
               <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
-                <h3 className="text-lg font-semibold text-white sm:text-xl">Selected Insight</h3>
+                <h3 className="text-lg font-semibold text-white sm:text-xl">AI Performance Trend</h3>
                 <p className="text-sm text-slate-400">
-                  Pick any top metric tile or intersection card to update this chart.
+                  Select any metric tile or intersection to review wait-time performance over time.
                 </p>
 
                 <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/55 p-4">
@@ -743,7 +743,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-lg shadow-black/20 sm:p-6">
                 <h3 className="text-lg font-semibold text-white sm:text-xl">Live Alerts</h3>
                 <p className="text-sm text-slate-400">
-                  Important traffic updates generated from current conditions.
+                  Real-time warnings for queues, delays, and flow risk conditions.
                 </p>
                 <div className="subtle-scrollbar mt-4 max-h-[28rem] overflow-y-auto pr-2">
                   <div className="sticky top-1 z-10 mb-2 flex justify-end">
@@ -772,7 +772,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
 
           <CollapsibleTabSection
             title="Intersection Snapshot"
-            description="Simple per-location status for quick decisions."
+            description="Intersection-level waiting and delay status for AI tuning."
             defaultOpen={false}
           >
             <div className="subtle-scrollbar max-h-[42rem] overflow-y-auto pr-2">
@@ -790,7 +790,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
 
           <CollapsibleTabSection
             title="Top-Down City Simulation"
-            description="Open or close the full map, zoom, and timeline controls."
+            description="AI-controlled network playback with zoom and timeline controls."
             defaultOpen={false}
           >
             <section
@@ -805,7 +805,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                 Top-Down City Simulation
               </h3>
               <p className="text-sm text-slate-400">
-                Frame-by-frame map of all branches from live simulation data.
+                Frame-by-frame view of how AI signal choices affect city-wide traffic flow.
               </p>
             </div>
 
@@ -1222,7 +1222,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
       events.push({
         time: String(time),
         level: 'warning',
-        message: `${node.id.replace('node_', 'Node ')} is building congestion (${node.totalQueue} cars waiting).`,
+        message: `${node.id.replace('node_', 'Node ')} queue is rising (${node.totalQueue} cars waiting).`,
       })
     }
 
@@ -1230,7 +1230,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
       events.push({
         time: String(time),
         level: 'critical',
-        message: `${node.id.replace('node_', 'Node ')} has elevated delay (${node.avgWait.toFixed(1)}s average wait).`,
+        message: `${node.id.replace('node_', 'Node ')} has high delay risk (${node.avgWait.toFixed(1)}s average wait).`,
       })
     }
 
@@ -1238,7 +1238,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
       events.push({
         time: String(time),
         level: 'info',
-        message: `${node.id.replace('node_', 'Node ')} is flowing smoothly right now.`,
+        message: `${node.id.replace('node_', 'Node ')} is in efficient flow right now.`,
       })
     }
   })
@@ -1247,7 +1247,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
     events.push({
       time: String(time),
       level: 'info',
-      message: 'All nodes stable for current tick.',
+      message: 'All nodes stable at this AI decision tick.',
     })
   }
 
@@ -1422,8 +1422,8 @@ function IntersectionCard({ node, onClick }: IntersectionCardProps) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <NodeStat label="Cars Waiting" value={String(node.totalQueue)} />
-        <NodeStat label="Average Delay" value={`${node.avgWait.toFixed(1)}s`} />
+        <NodeStat label="Vehicles Waiting" value={String(node.totalQueue)} />
+        <NodeStat label="Mean Wait" value={`${node.avgWait.toFixed(1)}s`} />
         <NodeStat label="Lane A Queue" value={String(node.q1)} />
         <NodeStat label="Lane B Queue" value={String(node.q2)} />
       </div>
