@@ -2,6 +2,7 @@ import argparse
 import json
 import time
 from pathlib import Path
+import tempfile
 
 import numpy as np
 from env.traffic_env import GridEnv
@@ -25,16 +26,55 @@ LIVE_UI_SLEEP_SECONDS = 0.5
 
 BRIDGE_PATH = Path('evaluate_bridge.json')
 PUBLIC_BRIDGE_PATH = Path('frontend/public/evaluate_bridge.json')
+LIVE_UI_LOCK_PATH = Path(tempfile.gettempdir()) / 'trafficbot_evaluate_live_ui.lock'
+
+_LIVE_UI_LOCK_HANDLE = None
+
+
+def _write_json_atomic(path: Path, data: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile('w', delete=False, dir=path.parent, encoding='utf-8') as temp_file:
+        json.dump(data, temp_file, indent=2)
+        temp_path = Path(temp_file.name)
+
+    try:
+        temp_path.replace(path)
+    except PermissionError:
+        with path.open('w', encoding='utf-8') as fallback_file:
+            json.dump(data, fallback_file, indent=2)
+        temp_path.unlink(missing_ok=True)
+
+
+def acquire_live_ui_lock():
+    global _LIVE_UI_LOCK_HANDLE
+
+    if _LIVE_UI_LOCK_HANDLE is not None:
+        return
+
+    lock_file = LIVE_UI_LOCK_PATH.open('a+', encoding='utf-8')
+
+    try:
+        import msvcrt
+
+        lock_file.seek(0, 2)
+        if lock_file.tell() == 0:
+            lock_file.write('0')
+            lock_file.flush()
+
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        _LIVE_UI_LOCK_HANDLE = lock_file
+    except Exception:
+        lock_file.close()
+        raise RuntimeError(
+            'Another evaluate.py --live-ui process is already running. Stop it before starting a new one.'
+        )
 
 
 def write_ui_bridge(ui_data: dict):
-    PUBLIC_BRIDGE_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    with BRIDGE_PATH.open('w', encoding='utf-8') as bridge_file:
-        json.dump(ui_data, bridge_file, indent=2)
-
-    with PUBLIC_BRIDGE_PATH.open('w', encoding='utf-8') as public_bridge_file:
-        json.dump(ui_data, public_bridge_file, indent=2)
+    _write_json_atomic(BRIDGE_PATH, ui_data)
+    _write_json_atomic(PUBLIC_BRIDGE_PATH, ui_data)
 
 
 # ===================================================================
@@ -152,6 +192,8 @@ def run_ai_episode(model_path, steps=EVAL_STEPS):
 def run_ai_live_stream(model_path='dt_traffic_model.pth', sleep_seconds=LIVE_UI_SLEEP_SECONDS):
     if not HAS_TORCH:
         raise RuntimeError("PyTorch is required for live AI UI streaming. Install torch before running evaluate.py --live-ui.")
+
+    acquire_live_ui_lock()
 
     from agent import TrafficDecisionTransformer
 

@@ -378,7 +378,15 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
       return
     }
 
-    setCityFrameIndex((currentIndex) => Math.min(currentIndex, nextMax))
+    setCityFrameIndex((currentIndex) => {
+      const boundedIndex = Math.min(currentIndex, nextMax)
+
+      if (boundedIndex >= nextMax) {
+        setIsCityAutoFollow(true)
+      }
+
+      return boundedIndex
+    })
   }, [environmentHistory, isCityAutoFollow])
 
   const nodes = useMemo(() => toDerivedNodes(latest), [latest])
@@ -1046,6 +1054,8 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
 
                   if (nextIndex >= cityFrameMax) {
                     setIsCityAutoFollow(true)
+                  } else {
+                    setIsCityAutoFollow(false)
                   }
                 }}
                 className="min-w-[220px] flex-1 accent-sky-300"
@@ -1058,6 +1068,8 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                   setCityFrameIndex(nextIndex)
                   if (nextIndex >= cityFrameMax) {
                     setIsCityAutoFollow(true)
+                  } else {
+                    setIsCityAutoFollow(false)
                   }
                 }}
                 disabled={activeCityFrameIndex >= cityFrameMax}
