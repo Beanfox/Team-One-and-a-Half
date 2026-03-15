@@ -1,0 +1,14 @@
+Generating network trajectories from 6x6 GridEnv...
+  Collected 7200 trajectories (200 episodes × 36 nodes)
+  Raw return stats: mean=-20307.0, best=-7887.8, worst=-27844.5
+  Saved normalization stats to norm_stats.npz
+Training on cpu, 21600 samples per epoch
+Starting training...
+Epoch 1/50 | Loss: 0.3855
+Epoch 10/50 | Loss: 0.2923
+Epoch 20/50 | Loss: 0.2600
+Epoch 30/50 | Loss: 0.2433
+Epoch 40/50 | Loss: 0.2333
+Epoch 50/50 | Loss: 0.2251
+Training complete! Saving model...
+Saved as dt_traffic_model.pth
