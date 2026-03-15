@@ -40,6 +40,8 @@ type DerivedNode = {
   wait1: number
   wait2: number
   avgWait: number
+  northSouthLight: SignalLight
+  eastWestLight: SignalLight
 }
 
 type IncidentEvent = {
@@ -288,7 +290,7 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
 
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center px-6 py-10 text-center sm:px-8">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-sky-200/90">
-          AI Traffic Wait-Time Reduction
+          AI-Driven Traffic Signal Control
         </p>
 
         <h1 className="mt-4 max-w-4xl text-5xl font-bold leading-tight text-white sm:text-6xl lg:text-7xl">
@@ -296,8 +298,7 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
         </h1>
 
         <p className="mt-4 max-w-3xl text-sm text-slate-300 sm:text-base">
-          AI-driven traffic signal control designed to reduce time spent waiting,
-          cut intersection congestion, and keep vehicles moving.
+          Designed to reduce wait time, cut intersection congestion, and keep vehicles moving.
         </p>
 
         <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -306,14 +307,14 @@ function LandingPage({ onEnterDashboard, environmentHistory }: LandingPageProps)
             onClick={onEnterDashboard}
             className="rounded-xl bg-sky-300 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-400/10 transition hover:bg-sky-200"
           >
-            Open AI Control Dashboard
+            Open Dashboard
           </button>
         </div>
 
         <div className="mt-12 grid w-full max-w-5xl gap-4 md:grid-cols-3">
           <LandingStat
             title="Model Update"
-            value={`t=${latest.time}`}
+            value={`${latest.time}s`}
             detail="Latest AI decision cycle"
           />
           <LandingStat
@@ -339,8 +340,10 @@ type DashboardPageProps = {
 
 function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPageProps) {
   const latest = environmentHistory[environmentHistory.length - 1]
+  const [isDemoMode, setIsDemoMode] = useState(false)
   const [cityFrameIndex, setCityFrameIndex] = useState(0)
   const [isCityAutoFollow, setIsCityAutoFollow] = useState(true)
+  const cityLastManualControlRef = useRef<number>(0)
   const [cityZoom, setCityZoom] = useState(0.5)
   const [cityZoomInput, setCityZoomInput] = useState('50')
   const [cityPan, setCityPan] = useState({ x: 0, y: 0 })
@@ -378,6 +381,13 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
       return
     }
 
+    const manualOverrideAgeMs = Date.now() - cityLastManualControlRef.current
+    if (manualOverrideAgeMs > 5000) {
+      setIsCityAutoFollow(true)
+      setCityFrameIndex(nextMax)
+      return
+    }
+
     setCityFrameIndex((currentIndex) => {
       const boundedIndex = Math.min(currentIndex, nextMax)
 
@@ -389,14 +399,18 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     })
   }, [environmentHistory, isCityAutoFollow])
 
-  const nodes = useMemo(() => toDerivedNodes(latest), [latest])
+  const latestForDisplay = useMemo(
+    () => (isDemoMode ? applyDemoModeLights(latest) : latest),
+    [isDemoMode, latest],
+  )
+
+  const nodes = useMemo(() => toDerivedNodes(latestForDisplay), [latestForDisplay])
   const tickLabels = environmentHistory.map((tick) => `T${tick.time}`)
   const totalQueue = nodes.reduce((sum, node) => sum + node.totalQueue, 0)
   const averageNodeWait =
     Math.round((nodes.reduce((sum, node) => sum + node.avgWait, 0) / nodes.length) * 10) /
     10
-  const greenNodes = nodes.filter((node) => node.phase === 1).length
-  const redNodes = nodes.length - greenNodes
+  const greenNodes = nodes.filter((node) => node.eastWestLight === 'Green').length
 
   const totalQueueSeries = environmentHistory.map((tick) =>
     toDerivedNodes(tick).reduce((sum, node) => sum + node.totalQueue, 0),
@@ -407,7 +421,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     return Math.round(value * 10) / 10
   })
   const greenNodeSeries = environmentHistory.map(
-    (tick) => toDerivedNodes(tick).filter((node) => node.phase === 1).length,
+    (tick) => toDerivedNodes(tick).filter((node) => node.eastWestLight === 'Green').length,
   )
   const maxQueueSeries = environmentHistory.map((tick) => {
     const tickNodes = toDerivedNodes(tick)
@@ -418,7 +432,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     node.totalQueue > maxNode.totalQueue ? node : maxNode,
   )
 
-  const generatedEvents = buildEventsFromNodes(latest.time, nodes)
+  const generatedEvents = buildEventsFromNodes(latestForDisplay.time, nodes)
   const [insightSelection, setInsightSelection] = useState<InsightSelection>({
     kind: 'totalQueue',
   })
@@ -496,7 +510,11 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
     ? cityFrameMax
     : Math.min(cityFrameIndex, cityFrameMax)
   const cityFrame = environmentHistory[activeCityFrameIndex] ?? latest
-  const cityLayout = useMemo(() => buildCityLayout(cityFrame), [cityFrame])
+  const cityFrameForDisplay = useMemo(
+    () => (isDemoMode ? applyDemoModeLights(cityFrame) : cityFrame),
+    [isDemoMode, cityFrame],
+  )
+  const cityLayout = useMemo(() => buildCityLayout(cityFrameForDisplay), [cityFrameForDisplay])
 
   const clampCityZoomPercent = (nextPercent: number) => Math.min(260, Math.max(50, nextPercent))
 
@@ -640,13 +658,27 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={onBackToLanding}
-                className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-200/40 hover:bg-white/10"
-              >
-                Back to Landing
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDemoMode((current) => !current)}
+                  className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                    isDemoMode
+                      ? 'border-emerald-300/50 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/20'
+                      : 'border-white/20 bg-white/5 text-slate-100 hover:border-sky-200/40 hover:bg-white/10'
+                  }`}
+                >
+                  Demo Mode: {isDemoMode ? 'On' : 'Off'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onBackToLanding}
+                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-200/40 hover:bg-white/10"
+                >
+                  Back to Landing
+                </button>
+              </div>
             </div>
           </header>
 
@@ -666,7 +698,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               <MetricTile
                 label="Average Wait"
                 value={`${averageNodeWait}s`}
-                detail="AI target: reduce this value"
+                detail="Average wait time for a car at an intersection"
                 gradient="from-sky-300 to-cyan-300"
                 onClick={() => setInsightSelection({ kind: 'avgWait' })}
               />
@@ -680,7 +712,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               <MetricTile
                 label="Highest Queue Node"
                 value={`${maxQueueNode.id.replace('node_', 'Node ')} (${maxQueueNode.totalQueue})`}
-                detail={`Main delay hotspot • ${redNodes} red signals`}
+                detail={`Main delay hotspot`}
                 gradient="from-rose-300 to-orange-300"
                 onClick={() => setInsightSelection({ kind: 'peakNode' })}
               />
@@ -1021,6 +1053,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               <button
                 type="button"
                 onClick={() => {
+                  cityLastManualControlRef.current = Date.now()
                   setIsCityAutoFollow(false)
                   setCityFrameIndex(0)
                 }}
@@ -1033,6 +1066,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
               <button
                 type="button"
                 onClick={() => {
+                  cityLastManualControlRef.current = Date.now()
                   setIsCityAutoFollow(false)
                   setCityFrameIndex(Math.max(0, activeCityFrameIndex - 1))
                 }}
@@ -1055,6 +1089,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                   if (nextIndex >= cityFrameMax) {
                     setIsCityAutoFollow(true)
                   } else {
+                    cityLastManualControlRef.current = Date.now()
                     setIsCityAutoFollow(false)
                   }
                 }}
@@ -1069,6 +1104,7 @@ function DashboardPage({ onBackToLanding, environmentHistory }: DashboardPagePro
                   if (nextIndex >= cityFrameMax) {
                     setIsCityAutoFollow(true)
                   } else {
+                    cityLastManualControlRef.current = Date.now()
                     setIsCityAutoFollow(false)
                   }
                 }}
@@ -1205,6 +1241,46 @@ function roadGlowColor(waitSeconds: number): string {
   return 'rgba(255, 255, 255, 0.28)'
 }
 
+function applyDemoModeLights(tick: EnvironmentTick): EnvironmentTick {
+  const intersections: Record<string, EnvironmentNode> = {}
+
+  for (const [nodeId, node] of Object.entries(tick.intersections)) {
+    const nodeNumberMatch = nodeId.match(/\d+/)
+    const nodeNumber = nodeNumberMatch ? Number(nodeNumberMatch[0]) : 0
+    const cycle = (tick.time + nodeNumber) % 12
+
+    let phase: 0 | 1 = 0
+    let northSouthLight: SignalLight = 'Green'
+    let eastWestLight: SignalLight = 'Red'
+
+    if (cycle === 5) {
+      phase = 0
+      northSouthLight = 'Yellow'
+      eastWestLight = 'Red'
+    } else if (cycle >= 6 && cycle <= 10) {
+      phase = 1
+      northSouthLight = 'Red'
+      eastWestLight = 'Green'
+    } else if (cycle === 11) {
+      phase = 1
+      northSouthLight = 'Red'
+      eastWestLight = 'Yellow'
+    }
+
+    intersections[nodeId] = {
+      ...node,
+      phase,
+      northSouthLight,
+      eastWestLight,
+    }
+  }
+
+  return {
+    time: tick.time,
+    intersections,
+  }
+}
+
 function toDerivedNodes(tick: EnvironmentTick): DerivedNode[] {
   return Object.entries(tick.intersections)
     .sort(([a], [b]) => {
@@ -1220,6 +1296,10 @@ function toDerivedNodes(tick: EnvironmentTick): DerivedNode[] {
     .map(([id, node]) => {
       const totalQueue = node.q1 + node.q2
       const avgWait = (node.wait1 + node.wait2) / 2
+      const northSouthLight =
+        node.northSouthLight ?? (node.phase === 0 ? 'Green' : 'Red')
+      const eastWestLight =
+        node.eastWestLight ?? (node.phase === 1 ? 'Green' : 'Red')
 
       return {
         id,
@@ -1230,6 +1310,8 @@ function toDerivedNodes(tick: EnvironmentTick): DerivedNode[] {
         wait1: node.wait1,
         wait2: node.wait2,
         avgWait,
+        northSouthLight,
+        eastWestLight,
       }
     })
 }
@@ -1254,7 +1336,7 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
       })
     }
 
-    if (node.phase === 1 && node.totalQueue <= 3) {
+    if (node.eastWestLight === 'Green' && node.totalQueue <= 3) {
       events.push({
         time: String(time),
         level: 'info',
@@ -1276,16 +1358,16 @@ function buildEventsFromNodes(time: number, nodes: DerivedNode[]): IncidentEvent
 
 type LandingStatProps = {
   title: string
-  value: string
+  value: string | number
   detail: string
 }
 
 function LandingStat({ title, value, detail }: LandingStatProps) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-center shadow-lg shadow-black/20">
+    <article className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-center shadow-lg shadow-black/20">
       <p className="text-xs uppercase tracking-wide text-slate-400">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-300">{detail}</p>
+      <p className="text-2xl font-semibold text-white">{value}</p>
+      <p className="text-xs text-slate-300">{detail}</p>
     </article>
   )
 }
@@ -1422,6 +1504,18 @@ type IntersectionCardProps = {
 
 function IntersectionCard({ node, onClick }: IntersectionCardProps) {
   const nodeName = node.id.replace('node_', 'Node ')
+  const nsPillClass =
+    node.northSouthLight === 'Green'
+      ? 'bg-emerald-300/20 text-emerald-200'
+      : node.northSouthLight === 'Yellow'
+        ? 'bg-amber-300/20 text-amber-200'
+        : 'bg-rose-300/20 text-rose-200'
+  const ewPillClass =
+    node.eastWestLight === 'Green'
+      ? 'bg-emerald-300/20 text-emerald-200'
+      : node.eastWestLight === 'Yellow'
+        ? 'bg-amber-300/20 text-amber-200'
+        : 'bg-rose-300/20 text-rose-200'
 
   return (
     <article
@@ -1430,15 +1524,14 @@ function IntersectionCard({ node, onClick }: IntersectionCardProps) {
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-100">{nodeName}</p>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-            node.phase === 1
-              ? 'bg-emerald-300/20 text-emerald-200'
-              : 'bg-rose-300/20 text-rose-200'
-          }`}
-        >
-          {node.phase === 1 ? 'Green' : 'Red'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${nsPillClass}`}>
+            NS {node.northSouthLight}
+          </span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ewPillClass}`}>
+            EW {node.eastWestLight}
+          </span>
+        </div>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
