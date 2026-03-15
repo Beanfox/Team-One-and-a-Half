@@ -42,6 +42,9 @@ class SimplifiedIntersection:
         # Cars discharged this tick, to be routed by GridEnv
         self.discharged_this_tick = np.zeros(2, dtype=np.float32)
 
+        # Global step counter (set by GridEnv)
+        self.global_step = 0
+
     def get_state_vector(self):
         """
         STRICT INTERFACE 1:
@@ -74,12 +77,12 @@ class SimplifiedIntersection:
             reward -= 5.0
         else:
             if action == 1:
-                # Trigger yellow -> switch
-                self.in_transition_delay = 3
+                # Trigger yellow -> switch (costly!)
+                self.in_transition_delay = 5        # longer yellow phase
                 self.current_phase = 1 if self.current_phase == 0 else 0
                 self.time_in_phase = 0
-                self.startup_delay_remaining = 2
-                reward -= 5.0
+                self.startup_delay_remaining = 3    # longer startup
+                reward -= 15.0                       # heavy switch penalty
             else:
                 self.time_in_phase += 1
 
@@ -98,10 +101,11 @@ class SimplifiedIntersection:
     def _calculate_state_reward(self):
         """
         Negative signal punishing long queues and starving directions.
+        No clipping — the full wait-time signal is preserved so the model
+        can distinguish moderate from severe congestion.
         """
         queue_penalty = np.sum(self.queue_lengths) * 0.5
-        clipped_wait_times = np.clip(self.wait_times, 0, 100)
-        wait_penalty = np.sum((clipped_wait_times / 10.0) ** 2)
+        wait_penalty = np.sum((self.wait_times / 10.0) ** 1.5)
         return -(queue_penalty + wait_penalty)
 
     def _update_arrivals(self):
@@ -110,18 +114,27 @@ class SimplifiedIntersection:
         Network-routed cars are added separately via add_routed_arrivals().
         Edge nodes get more external arrivals; interior nodes get fewer.
         """
-        is_edge = (self.row == 0 or self.row == 5 or self.col == 0 or self.col == 5)
+        grid_rows = 6
+        is_edge = (self.row == 0 or self.row == grid_rows - 1
+                   or self.col == 0 or self.col == grid_rows - 1)
+
+        # Strongly asymmetric traffic: N/S direction is 3-4x heavier than E/W
+        # This creates a clear optimization opportunity:
+        #   - A fixed timer wastes ~50% of green on the nearly-empty E/W
+        #   - A smart policy gives more green to the busy N/S direction
+        # Time-varying: a "rush hour" pulse makes it even more pronounced
+        rush = 1.3 if (self.global_step % 100) < 50 else 0.7
+
         if is_edge:
-            p_main = 0.7 if self.is_main_street else 0.3
-            p_side = 0.2 if self.is_main_street else 0.4
+            ns_rate = 0.55 * rush   # Heavy N/S
+            ew_rate = 0.12 * rush   # Light E/W
         else:
-            # Interior nodes get much less external traffic — they're fed by routing
-            p_main = 0.15
-            p_side = 0.10
+            ns_rate = 0.10 * rush
+            ew_rate = 0.03 * rush
 
         arrivals = np.array([
-            np.random.poisson(p_main * 3),
-            np.random.poisson(p_side * 3)
+            np.random.poisson(ns_rate * 3),
+            np.random.poisson(ew_rate * 3)
         ], dtype=np.float32)
 
         self.queue_lengths += arrivals
@@ -138,7 +151,7 @@ class SimplifiedIntersection:
                 discharge_rate = 1.0
                 self.startup_delay_remaining -= 1
             else:
-                discharge_rate = 3.0
+                discharge_rate = 4.0
 
             # Backpressure: cap discharge by downstream capacity
             cap = max(self.downstream_capacity[active], 0.0)
@@ -242,6 +255,7 @@ class GridEnv:
         # Phase 1: Compute downstream capacities, then step each intersection
         for i, inter in enumerate(self.intersections):
             action = actions[i] if i < len(actions) else 0
+            inter.global_step = self.global_time
             ds_cap = self._get_downstream_capacity(i)
             s, r = inter.step(action, ds_cap)
             states.append(s)
